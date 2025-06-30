@@ -2,14 +2,14 @@ name: Run Tennis Betting Bot Daily
 
 on:
   schedule:
-    - cron: '0 5 * * *'  # Tous les jours à 7h heure de Paris (5h UTC)
-  workflow_dispatch:     # Permet aussi un lancement manuel
+    - cron: '0 5 * * *'  # Tous les jours à 7h (heure de Paris, UTC+2)
+  workflow_dispatch:     # Permet un lancement manuel
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
 
-    env:  # 🔐 Variables d’environnement injectées depuis les Secrets GitHub
+    env:  # 🔐 Injection des clés API depuis les secrets GitHub
       API_TENNIS_KEY: ${{ secrets.API_TENNIS_KEY }}
       ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
       TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
@@ -24,8 +24,8 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: 📦 Installer les dépendances
+      - name: 📦 Installer les dépendances Python
         run: pip install -r requirements.txt
 
-      - name: 🚀 Lancer le bot de paris tennis
+      - name: 🚀 Exécuter le bot tennis
         run: python daily_run.py
