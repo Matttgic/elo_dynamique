@@ -7,28 +7,70 @@ import pandas as pd
 from telegram_bot import send_message
 from get_tennis_odds import build_odds_dataframe
 
-# 🔐 Clés API depuis les variables d'environnement
+# 🔐 API key
 API_TENNIS_KEY = os.getenv("API_TENNIS_KEY")
 
 # 📅 Date du jour
 today = datetime.date.today().strftime("%Y-%m-%d")
 
-# 📄 Fichier Elo
+# 📄 Elo file
 ELO_FILE = "elo_dynamique_2024_K_variable.csv"
 
-# 🔁 Proba Elo
+# 🎾 Surface mapping par tournoi (ATP/WTA)
+SURFACE_MAP = {
+    "wimbledon": "grass",
+    "roland garros": "clay",
+    "french open": "clay",
+    "us open": "hard",
+    "australian open": "hard",
+    "miami": "hard",
+    "indian wells": "hard",
+    "cincinnati": "hard",
+    "madrid": "clay",
+    "rome": "clay",
+    "monte carlo": "clay",
+    "barcelona": "clay",
+    "paris": "hard",
+    "doha": "hard",
+    "dubai": "hard",
+    "adelaide": "hard",
+    "brisbane": "hard",
+    "houston": "clay",
+    "estoril": "clay",
+    "lyon": "clay",
+    "s-hertogenbosch": "grass",
+    "halle": "grass",
+    "queens": "grass",
+    "eastbourne": "grass",
+    "atlanta": "hard",
+    "washington": "hard",
+    "toronto": "hard",
+    "montreal": "hard",
+    "shanghai": "hard",
+    "tokyo": "hard",
+    "vienna": "hard",
+    "basel": "hard",
+    "zhuhai": "hard",
+    "chengdu": "hard",
+    "antwerp": "hard",
+    "stockholm": "hard",
+    "metz": "hard",
+    "moselle": "hard"
+}
+
+# 🔁 Fonction proba Elo
 def elo_probability(elo1, elo2):
     return 1 / (1 + 10 ** ((elo2 - elo1) / 400))
 
-# ✂️ Normalisation nom style "n. djokovic"
+# 🧹 Normalisation des noms
 def normalize_name(name):
     name = name.lower().replace("-", " ").replace("'", "").strip()
     parts = name.split()
-    if len(parts) == 1:
-        return parts[0]
-    return f"{parts[0][0]}. {parts[-1]}"
+    if len(parts) >= 2:
+        return f"{parts[0][0]}. {' '.join(parts[1:])}"
+    return name
 
-# 📡 Obtenir les matchs du jour depuis API-Tennis
+# 📡 Récupération des matchs
 def get_matches():
     url = f"https://api.api-tennis.com/tennis/?method=get_fixtures&APIkey={API_TENNIS_KEY}&date_start={today}&date_stop={today}"
     response = requests.get(url)
@@ -42,32 +84,36 @@ def get_matches():
     for m in data["result"]:
         if m.get("event_type_type") not in ["Atp Singles", "Wta Singles"]:
             continue
+        tournament = m.get("tournament_name", "").lower()
+        surface = "unknown"
+        for key, val in SURFACE_MAP.items():
+            if key in tournament:
+                surface = val
+                break
         matches.append({
             "player1": normalize_name(m["event_first_player"]),
             "player2": normalize_name(m["event_second_player"]),
-            "surface": m.get("surface", "unknown").lower().strip(),
-            "tournament": m.get("tournament_name", "unknown").strip()
+            "surface": surface,
+            "tournament": tournament
         })
     return pd.DataFrame(matches)
 
-# 🧠 Charger Elo
+# 📥 Chargement du Elo
 def load_elo():
     if not os.path.exists(ELO_FILE):
         print("⛔ Fichier Elo manquant")
         return None
-
     df = pd.read_csv(ELO_FILE)
-    if {"player", "elo_Hard", "elo_Clay", "elo_Grass"}.issubset(df.columns):
-        df = df.melt(id_vars="player", var_name="surface", value_name="elo")
-        df["surface"] = df["surface"].str.replace("elo_", "").str.lower()
-        df["player"] = df["player"].map(normalize_name)
+    df = df.melt(id_vars="player", var_name="surface", value_name="elo")
+    df["surface"] = df["surface"].str.replace("elo_", "").str.lower()
+    df["player"] = df["player"].apply(normalize_name)
     return df
 
-# 🤖 Routine principale
+# 🤖 Bot principal
 def run_bot():
-    print("🚀 Lancement du bot")
+    print("🚀 Lancement du bot tennis")
     matches = get_matches()
-    odds = build_odds_dataframe(normalize_name)
+    odds = build_odds_dataframe()
     elo_df = load_elo()
 
     if matches.empty or odds.empty or elo_df is None:
@@ -76,10 +122,10 @@ def run_bot():
 
     df = pd.merge(matches, odds, on=["player1", "player2"], how="inner")
     if df.empty:
-        send_message(f"📊 {len(matches)} matchs récupérés, mais aucun avec cotes.")
+        send_message(f"📊 {len(matches)} matchs récupérés mais aucun avec cotes.")
         return
 
-    # Récup Elo
+    # Attribution Elo
     elo_dict = {(row["player"], row["surface"]): row["elo"] for _, row in elo_df.iterrows()}
     def get_elo(player, surface):
         return elo_dict.get((player, surface), 1500)
@@ -93,9 +139,10 @@ def run_bot():
 
     bets = df[(df["value1"] > 0.05) | (df["value2"] > 0.05)]
 
-    message = f"📊 *{len(df)} matchs analysés aujourd’hui*\n\n"
+    # ✉️ Message Telegram
+    message = f"📊 {len(matches)} matchs analysés aujourd’hui\n\n"
     if bets.empty:
-        message += "🟡 *Aucun value bet détecté*"
+        message += "🟡 *Aucun value bet détecté aujourd’hui.*"
     else:
         message += "🔥 *Value bets trouvés* :\n"
         for _, row in bets.iterrows():
