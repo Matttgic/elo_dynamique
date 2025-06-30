@@ -4,7 +4,7 @@ import datetime
 import os
 import subprocess
 
-# Configuration via variables d’environnement
+# 🔐 Clés via variables d’environnement
 ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 API_TENNIS_KEY = os.getenv("API_TENNIS_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
@@ -112,5 +112,6 @@ def run_prediction_and_send_message():
 if __name__ == "__main__":
     run_prediction_and_send_message()
 
-    # ✅ Mise à jour automatique des Elo après les matchs
-    subprocess.run(["python", "update_elo.py"])
+    # 🔁 Étapes supplémentaires après les paris
+    subprocess.run(["python", "fetch_results.py"])     # récupère les résultats d’hier
+    subprocess.run(["python", "update_elo.py"])        # met à jour les Elo
