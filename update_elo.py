@@ -31,12 +31,9 @@ def update_elo(winner_elo, loser_elo, k):
 
 # 🎚️ K-factor
 def get_k(level):
-    if level == "G": return 50
-    if level == "M": return 40
-    if level == "A": return 35
-    if level == "B": return 30
-    if level == "I": return 25
-    return 30
+    return {
+        "G": 50, "M": 40, "A": 35, "B": 30, "I": 25
+    }.get(level, 30)
 
 # ✅ Charger fichiers
 if not os.path.exists(RESULTS_FILE) or not os.path.exists(ELO_FILE):
@@ -45,6 +42,10 @@ if not os.path.exists(RESULTS_FILE) or not os.path.exists(ELO_FILE):
 
 results_df = pd.read_csv(RESULTS_FILE)
 elo_df = pd.read_csv(ELO_FILE)
+
+if results_df.empty:
+    print("⚠️ Aucun résultat à traiter.")
+    exit()
 
 # ✅ Détection du niveau
 results_df["level"] = results_df["tournament"].apply(detect_tournament_level)
@@ -59,17 +60,21 @@ for p in all_players:
 # 🔄 Mise à jour
 for _, row in results_df.iterrows():
     p1, p2 = row["player1"], row["player2"]
-    surface = row.get("surface", "hard").capitalize()
+    surface = str(row.get("surface", "hard")).capitalize()
     winner = row["winner"]
     level = row.get("level", "?")
     k = get_k(level)
 
     col = f"elo_{surface}"
     if col not in ["elo_Hard", "elo_Clay", "elo_Grass"]:
-        col = "elo_Hard"
+        col = "elo_Hard"  # Valeur par défaut
 
-    elo1 = elo_df.loc[elo_df["player"] == p1, col].values[0]
-    elo2 = elo_df.loc[elo_df["player"] == p2, col].values[0]
+    try:
+        elo1 = elo_df.loc[elo_df["player"] == p1, col].values[0]
+        elo2 = elo_df.loc[elo_df["player"] == p2, col].values[0]
+    except IndexError:
+        print(f"⛔ Joueur introuvable : {p1} ou {p2}")
+        continue
 
     if winner == p1:
         new_elo1, new_elo2 = update_elo(elo1, elo2, k)
