@@ -7,7 +7,7 @@ import pandas as pd
 from telegram_bot import send_message
 from get_tennis_odds import build_odds_dataframe
 
-# 🔐 Clé API Tennis
+# 🔐 Clés API depuis les variables d'environnement
 API_TENNIS_KEY = os.getenv("API_TENNIS_KEY")
 
 # 📅 Date du jour
@@ -16,15 +16,19 @@ today = datetime.date.today().strftime("%Y-%m-%d")
 # 📄 Fichier Elo
 ELO_FILE = "elo_dynamique_2024_K_variable.csv"
 
-# 🔁 Probabilité Elo
+# 🔁 Proba Elo
 def elo_probability(elo1, elo2):
     return 1 / (1 + 10 ** ((elo2 - elo1) / 400))
 
-# 🔠 Normalisation des noms
+# ✂️ Normalisation nom style "n. djokovic"
 def normalize_name(name):
-    return name.lower().replace('.', '').replace('-', ' ').replace("'", "").strip()
+    name = name.lower().replace("-", " ").replace("'", "").strip()
+    parts = name.split()
+    if len(parts) == 1:
+        return parts[0]
+    return f"{parts[0][0]}. {parts[-1]}"
 
-# 📡 Récupération des matchs API-Tennis
+# 📡 Obtenir les matchs du jour depuis API-Tennis
 def get_matches():
     url = f"https://api.api-tennis.com/tennis/?method=get_fixtures&APIkey={API_TENNIS_KEY}&date_start={today}&date_stop={today}"
     response = requests.get(url)
@@ -46,7 +50,7 @@ def get_matches():
         })
     return pd.DataFrame(matches)
 
-# 📈 Chargement des Elo
+# 🧠 Charger Elo
 def load_elo():
     if not os.path.exists(ELO_FILE):
         print("⛔ Fichier Elo manquant")
@@ -56,25 +60,23 @@ def load_elo():
     if {"player", "elo_Hard", "elo_Clay", "elo_Grass"}.issubset(df.columns):
         df = df.melt(id_vars="player", var_name="surface", value_name="elo")
         df["surface"] = df["surface"].str.replace("elo_", "").str.lower()
-        df["player"] = df["player"].apply(normalize_name)
+        df["player"] = df["player"].map(normalize_name)
     return df
 
-# 🤖 Script principal
+# 🤖 Routine principale
 def run_bot():
-    print("🚀 Lancement du bot tennis Elo")
+    print("🚀 Lancement du bot")
     matches = get_matches()
-    odds = build_odds_dataframe()
+    odds = build_odds_dataframe(normalize_name)
     elo_df = load_elo()
 
     if matches.empty or odds.empty or elo_df is None:
-        send_message("⚠️ Erreur : données manquantes (fixtures, cotes ou Elo)")
+        send_message("⚠️ Erreur récupération des données.")
         return
 
     df = pd.merge(matches, odds, on=["player1", "player2"], how="inner")
-    total_matches = len(df)
-
-    if total_matches == 0:
-        send_message(f"📊 {len(matches)} matchs récupérés mais aucun avec cotes.")
+    if df.empty:
+        send_message(f"📊 {len(matches)} matchs récupérés, mais aucun avec cotes.")
         return
 
     # Récup Elo
@@ -84,17 +86,14 @@ def run_bot():
 
     df["elo1"] = df.apply(lambda row: get_elo(row["player1"], row["surface"]), axis=1)
     df["elo2"] = df.apply(lambda row: get_elo(row["player2"], row["surface"]), axis=1)
-
     df["proba1"] = df.apply(lambda row: elo_probability(row["elo1"], row["elo2"]), axis=1)
     df["proba2"] = 1 - df["proba1"]
-
     df["value1"] = df["proba1"] * df["odds1"] - 1
     df["value2"] = df["proba2"] * df["odds2"] - 1
 
     bets = df[(df["value1"] > 0.05) | (df["value2"] > 0.05)]
 
-    # 💬 Résultat Telegram
-    message = f"📊 *{total_matches} matchs analysés aujourd’hui*\n\n"
+    message = f"📊 *{len(df)} matchs analysés aujourd’hui*\n\n"
     if bets.empty:
         message += "🟡 *Aucun value bet détecté*"
     else:
