@@ -98,19 +98,14 @@ def run_prediction_and_send_message():
     if bets.empty:
         send_telegram("🟡 Aucun value bet trouvé aujourd’hui.")
     else:
-        msg = "📈 Value bets détectés :
-"
+        msg = "📈 Value bets détectés :\n"
         for _, row in bets.iterrows():
-            line = f"{row['player1']} vs {row['player2']} ({row['surface']})
-"
+            line = f"{row['player1']} vs {row['player2']} ({row['surface']})\n"
             if row['value1'] > 0.05:
-                line += f"→ {row['player1']} @ {row['odds1']} (value: {row['value1']:.2%})
-"
+                line += f"→ {row['player1']} @ {row['odds1']} (value: {row['value1']:.2%})\n"
             if row['value2'] > 0.05:
-                line += f"→ {row['player2']} @ {row['odds2']} (value: {row['value2']:.2%})
-"
-            msg += "
-" + line
+                line += f"→ {row['player2']} @ {row['odds2']} (value: {row['value2']:.2%})\n"
+            msg += "\n" + line
         send_telegram(msg)
 
 if __name__ == "__main__":
