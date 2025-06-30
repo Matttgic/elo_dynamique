@@ -98,7 +98,7 @@ def run_prediction_and_send_message():
             msg += "\n" + line
         send_telegram(msg)
 
-# ▶️ Lancement
+# ▶️ Lancement automatique
 if __name__ == "__main__":
     run_prediction_and_send_message()
     subprocess.run(["python", "fetch_results.py"])
