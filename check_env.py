@@ -1,12 +1,14 @@
 import os
 
-keys = ["API_TENNIS_KEY", "ODDS_API_KEY", "TELEGRAM_TOKEN", "CHAT_ID"]
+def check(name):
+    value = os.getenv(name)
+    if value:
+        print(f"✅ {name} est défini ({len(value)} caractères)")
+    else:
+        print(f"❌ {name} est **non défini**")
 
 print("🔍 Vérification des variables d'environnement GitHub Actions :\n")
-
-for key in keys:
-    value = os.getenv(key)
-    if value:
-        print(f"✅ {key} est défini ({len(value)} caractères)")
-    else:
-        print(f"❌ {key} est **non défini**")
+check("API_TENNIS_KEY")
+check("ODDS_API_KEY")
+check("TELEGRAM_TOKEN")
+check("CHAT_ID")
