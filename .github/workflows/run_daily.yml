@@ -2,7 +2,7 @@ name: Run Tennis Betting Bot Daily
 
 on:
   schedule:
-    - cron: '30 7 * * *'  # Tous les jours à 07h30 UTC
+    - cron: '0 7 * * *'  # Tous les jours à 07h UTC = 09h heure française
   workflow_dispatch:
 
 jobs:
