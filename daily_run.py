@@ -3,12 +3,13 @@ import requests
 import datetime
 import os
 
-# Configuration via variables d’environnement
+# 🔐 Clés API depuis les variables d'environnement
 ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 API_TENNIS_KEY = os.getenv("API_TENNIS_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
+# 📆 Récupération des matchs du jour
 def get_matches():
     today = datetime.datetime.today().strftime('%Y-%m-%d')
     url_events = f"https://api.api-tennis.com/tennis/?method=get_events&APIkey={API_TENNIS_KEY}&date={today}"
@@ -22,20 +23,11 @@ def get_matches():
         "tournament": m.get("tournament_name", "unknown").strip()
     } for m in matches])
 
+# 💸 Récupération des cotes du jour
 def get_odds():
     url_odds = f"https://api.the-odds-api.com/v4/sports/tennis/events/?apiKey={ODDS_API_KEY}&regions=eu"
     odds_response = requests.get(url_odds)
-    
-    try:
-        odds_data = odds_response.json()
-    except Exception as e:
-        send_telegram(f"❌ Erreur JSON Odds API : {e}")
-        return pd.DataFrame()
-
-    if not isinstance(odds_data, list):
-        send_telegram(f"❌ Erreur de réponse Odds API : {odds_data}")
-        return pd.DataFrame()
-    
+    odds_data = odds_response.json()
     odds_list = []
     for event in odds_data:
         if not event.get('bookmakers'):
@@ -57,11 +49,13 @@ def get_odds():
             continue
     return pd.DataFrame(odds_list)
 
+# 📤 Envoi Telegram
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     data = {"chat_id": CHAT_ID, "text": message}
     requests.post(url, data=data)
 
+# 🤖 Main function
 def run_prediction_and_send_message():
     matches_df = get_matches()
     odds_df = get_odds()
@@ -80,22 +74,37 @@ def run_prediction_and_send_message():
         send_telegram("⚠️ Aucun match avec cotes disponibles aujourd’hui.")
         return
 
-    # Chargement du fichier Elo
+    # 📥 Chargement du fichier Elo
     elo_path = "elo_dynamique_2024_K_variable.csv"
     if not os.path.exists(elo_path):
         send_telegram("❌ Fichier Elo manquant.")
         return
     elo_df = pd.read_csv(elo_path)
+    elo_df["player"] = elo_df["player"].str.strip()
 
-    required_cols = {"player", "surface", "elo"}
+    # ✅ Vérification des colonnes attendues
+    required_cols = {"player", "elo.clay", "elo.hard", "elo.grass"}
     if not required_cols.issubset(set(elo_df.columns)):
-        send_telegram("❌ Le fichier Elo ne contient pas les colonnes nécessaires.")
+        send_telegram("❌ Le fichier Elo ne contient pas les colonnes attendues.")
         return
 
-    elo_dict = {(row['player'], row['surface']): row['elo'] for _, row in elo_df.iterrows()}
+    # 🔎 Fonction pour Elo par surface
     def get_elo(player, surface):
-        return elo_dict.get((player, surface), 1500)
+        surface = surface.lower()
+        try:
+            row = elo_df[elo_df["player"] == player].iloc[0]
+            if surface == "clay":
+                return row["elo.clay"]
+            elif surface == "hard":
+                return row["elo.hard"]
+            elif surface == "grass":
+                return row["elo.grass"]
+            else:
+                return 1500
+        except:
+            return 1500
 
+    # 📊 Application des Elo et calculs
     df["elo1"] = df.apply(lambda row: get_elo(row["player1"], row["surface"]), axis=1)
     df["elo2"] = df.apply(lambda row: get_elo(row["player2"], row["surface"]), axis=1)
     df["proba1"] = df.apply(lambda row: 1 / (1 + 10 ** ((row["elo2"] - row["elo1"]) / 400)), axis=1)
@@ -103,6 +112,7 @@ def run_prediction_and_send_message():
     df["value1"] = df["proba1"] * df["odds1"] - 1
     df["value2"] = df["proba2"] * df["odds2"] - 1
 
+    # 🎯 Filtrage des paris avec value
     bets = df[(df["value1"] > 0.05) | (df["value2"] > 0.05)]
 
     if bets.empty:
