@@ -3,11 +3,10 @@ name: Run Tennis Betting Bot Daily
 on:
   schedule:
     - cron: '0 5 * * *'  # Tous les jours à 7h heure de Paris (5h UTC)
-  workflow_dispatch:      # Permet un lancement manuel depuis l'interface GitHub
+  workflow_dispatch:     # Permet le lancement manuel
 
 jobs:
   run-bot:
-    name: 📊 Tennis Betting Bot
     runs-on: ubuntu-latest
 
     steps:
@@ -24,3 +23,6 @@ jobs:
 
       - name: 🚀 Lancer le script principal
         run: python daily_run.py
+
+      - name: 🧪 Tester les variables d’environnement
+        run: python check_env.py
