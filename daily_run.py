@@ -25,7 +25,17 @@ def get_matches():
 def get_odds():
     url_odds = f"https://api.the-odds-api.com/v4/sports/tennis/events/?apiKey={ODDS_API_KEY}&regions=eu"
     odds_response = requests.get(url_odds)
-    odds_data = odds_response.json()
+    
+    try:
+        odds_data = odds_response.json()
+    except Exception as e:
+        send_telegram(f"❌ Erreur JSON Odds API : {e}")
+        return pd.DataFrame()
+
+    if not isinstance(odds_data, list):
+        send_telegram(f"❌ Erreur de réponse Odds API : {odds_data}")
+        return pd.DataFrame()
+    
     odds_list = []
     for event in odds_data:
         if not event.get('bookmakers'):
