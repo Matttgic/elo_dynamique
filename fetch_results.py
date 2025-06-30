@@ -1,4 +1,4 @@
-oimport pandas as pd
+import pandas as pd
 import requests
 import datetime
 import os
@@ -44,4 +44,4 @@ if rows:
     df.to_csv(OUTPUT_FILE, index=False)
     print(f"✅ {len(df)} résultats sauvegardés dans {OUTPUT_FILE}")
 else:
-    print("⚠️ Aucun résultat valide récupéré.")
+    print("⚠️ Aucun résultat valide récupéré.") 
