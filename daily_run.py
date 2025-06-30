@@ -3,16 +3,18 @@ import requests
 import datetime
 import os
 import subprocess
-from get_tennis_odds import build_odds_dataframe  # ⬅️ Import modulaire
+from get_tennis_odds import build_odds_dataframe  # Fonction modulaire pour les cotes
 
-# 🔐 Clés via variables d’environnement
+# 🔐 Clés API depuis les variables d’environnement
 API_TENNIS_KEY = os.getenv("API_TENNIS_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
+# 📦 Fonction modulaire pour les cotes
 def get_odds():
     return build_odds_dataframe()
 
+# 📡 Fonction pour récupérer les matchs du jour via API-Tennis
 def get_matches():
     today = datetime.datetime.today().strftime('%Y-%m-%d')
     url_events = f"https://api.api-tennis.com/tennis/?method=get_events&APIkey={API_TENNIS_KEY}&date={today}"
@@ -26,11 +28,13 @@ def get_matches():
         "tournament": m.get("tournament_name", "unknown").strip()
     } for m in matches])
 
+# ✉️ Envoi de message Telegram
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     data = {"chat_id": CHAT_ID, "text": message}
     requests.post(url, data=data)
 
+# 🤖 Fonction principale du bot
 def run_prediction_and_send_message():
     matches_df = get_matches()
     odds_df = get_odds()
@@ -49,18 +53,25 @@ def run_prediction_and_send_message():
         send_telegram("⚠️ Aucun match avec cotes disponibles aujourd’hui.")
         return
 
-    # Chargement du fichier Elo
+    # 📥 Charger et reformater le fichier Elo
     elo_path = "elo_dynamique_2024_K_variable.csv"
     if not os.path.exists(elo_path):
         send_telegram("❌ Fichier Elo manquant.")
         return
+
     elo_df = pd.read_csv(elo_path)
 
+    # 🔄 Restructuration : format long avec colonnes 'player', 'surface', 'elo'
+    if {"player", "elo_Hard", "elo_Clay", "elo_Grass"}.issubset(elo_df.columns):
+        elo_df = elo_df.melt(id_vars="player", var_name="surface", value_name="elo")
+        elo_df["surface"] = elo_df["surface"].str.replace("elo_", "").str.lower()
+
     required_cols = {"player", "surface", "elo"}
-    if not required_cols.issubset(set(elo_df.columns)):
-        send_telegram("❌ Le fichier Elo ne contient pas les colonnes nécessaires.")
+    if not required_cols.issubset(elo_df.columns):
+        send_telegram("❌ Le fichier Elo est invalide. Il doit contenir les colonnes : player, surface, elo.")
         return
 
+    # 🔍 Création dictionnaire (player, surface) → elo
     elo_dict = {(row['player'], row['surface']): row['elo'] for _, row in elo_df.iterrows()}
     def get_elo(player, surface):
         return elo_dict.get((player, surface), 1500)
@@ -87,9 +98,8 @@ def run_prediction_and_send_message():
             msg += "\n" + line
         send_telegram(msg)
 
+# ▶️ Lancement
 if __name__ == "__main__":
     run_prediction_and_send_message()
-
-    # 🔁 Étapes post-pronos : fetch résultats + maj Elo
     subprocess.run(["python", "fetch_results.py"])
-    subprocess.run(["python", "update_elo.py"]) 
+    subprocess.run(["python", "update_elo.py"])
