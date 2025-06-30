@@ -1,0 +1,25 @@
+name: Run Tennis Betting Bot Daily
+
+on:
+  schedule:
+    - cron: '0 5 * * *'  # Tous les jours à 7h heure de Paris (5h UTC)
+  workflow_dispatch:     # Permet un lancement manuel
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⬇️ Cloner le repo
+        uses: actions/checkout@v3
+
+      - name: 🐍 Installer Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Installer les dépendances
+        run: pip install -r requirements.txt
+
+      - name: 🚀 Lancer le script
+        run: python daily_run.py
