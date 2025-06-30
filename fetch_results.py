@@ -1,57 +1,70 @@
-import requests
+# fetch_results.py
+
 import os
-import pandas as pd
+import requests
 import datetime
+import pandas as pd
 
-# 🔐 Clé API Tennis
 API_TENNIS_KEY = os.getenv("API_TENNIS_KEY")
+RESULTS_FILE = "match_results.csv"
 
-# 📁 Fichier CSV de sortie
-OUTPUT_FILE = "results.csv"
+# 📌 Fonction de normalisation
+def normalize_name(name):
+    if not isinstance(name, str): return ""
+    parts = name.strip().lower().replace("-", " ").replace(".", "").replace("'", "").split()
+    if len(parts) == 0:
+        return ""
+    elif len(parts) == 1:
+        return parts[0]
+    else:
+        return f"{parts[0][0]}. {parts[-1]}"
 
-# 📅 Récupérer la date d’hier
-yesterday = (datetime.datetime.today() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
+# 📆 Date d'hier
+yesterday = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
 
-# 📡 URL de l’API Tennis
-url = f"https://api.api-tennis.com/tennis/?method=get_results&APIkey={API_TENNIS_KEY}&date={yesterday}"
-response = requests.get(url)
+# 📡 Requête à l'API
+def fetch_results():
+    url = f"https://api.api-tennis.com/tennis/?method=get_results&APIkey={API_TENNIS_KEY}&date_start={yesterday}&date_stop={yesterday}"
+    response = requests.get(url)
 
-# ✅ Vérification de la réponse avant json()
-if response.status_code != 200 or not response.text.strip().startswith("{"):
-    print(f"⛔ Erreur API Tennis : statut {response.status_code}")
-    print("🔎 Contenu brut reçu :", response.text)
-    exit()
+    if response.status_code != 200:
+        print("❌ Erreur API Tennis :", response.status_code)
+        print("📄 Contenu brut reçu :", response.text)
+        return
 
-data = response.json()
+    data = response.json()
+    if data.get("success") != 1:
+        print("❌ Résultat invalide ou vide")
+        return
 
-# ✅ Filtrer les résultats ATP/WTA
-matches = [
-    m for m in data.get("result", [])
-    if m.get("category") in ["ATP", "WTA"] and m.get("event_type") == "match"
-]
+    results = []
+    for match in data["result"]:
+        if match.get("event_type_type") not in ["Atp Singles", "Wta Singles"]:
+            continue
+        try:
+            p1 = normalize_name(match["event_first_player"])
+            p2 = normalize_name(match["event_second_player"])
+            winner = normalize_name(match["event_winner"])
+            surface = match.get("surface", "unknown").lower().strip()
 
-# 🧾 Construction des lignes de résultats
-rows = []
-for match in matches:
-    p1 = match.get("player1_name", "").strip()
-    p2 = match.get("player2_name", "").strip()
-    w = match.get("winner", "").strip()
-    s = match.get("surface", "unknown").lower().strip()
-    t = match.get("tournament_name", "unknown").strip()
+            results.append({
+                "player1": p1,
+                "player2": p2,
+                "winner": winner,
+                "surface": surface
+            })
+        except Exception as e:
+            print("⚠️ Erreur lecture match :", e)
+            continue
 
-    if p1 and p2 and w and p1 != p2:
-        rows.append({
-            "player1": p1,
-            "player2": p2,
-            "winner": w,
-            "surface": s,
-            "tournament": t
-        })
+    if not results:
+        print("📭 Aucun résultat enregistré.")
+        return
 
-# 💾 Sauvegarde
-if rows:
-    df = pd.DataFrame(rows)
-    df.to_csv(OUTPUT_FILE, index=False)
-    print(f"✅ {len(df)} résultats sauvegardés dans {OUTPUT_FILE}")
-else:
-    print("⚠️ Aucun résultat valide récupéré.")
+    df = pd.DataFrame(results)
+    df.to_csv(RESULTS_FILE, index=False)
+    print(f"✅ {len(df)} résultats enregistrés dans {RESULTS_FILE}")
+
+if __name__ == "__main__":
+    print("📡 Lancement de fetch_results.py")
+    fetch_results()
