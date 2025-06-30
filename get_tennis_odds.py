@@ -46,11 +46,10 @@ def build_odds_dataframe():
 
             row = {
                 "tournament": event.get("sport_title", ""),
-                "match": event.get("home_team", "") + " vs " + event.get("away_team", ""),
-                "player1": outcomes[0]["name"],
-                "odd1": outcomes[0]["price"],
-                "player2": outcomes[1]["name"],
-                "odd2": outcomes[1]["price"]
+                "player1": outcomes[0]["name"].strip(),
+                "odds1": float(outcomes[0]["price"]),
+                "player2": outcomes[1]["name"].strip(),
+                "odds2": float(outcomes[1]["price"])
             }
             all_rows.append(row)
 
@@ -62,7 +61,7 @@ def build_odds_dataframe():
     print(f"✅ {len(df)} matchs tennis récupérés.")
     return df
 
-# Exécution simple (pour test local)
+# Exécution simple pour test local
 if __name__ == "__main__":
     df = build_odds_dataframe()
-    print(df.head())
+    print(df.head()) 
