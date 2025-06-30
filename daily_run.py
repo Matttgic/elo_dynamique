@@ -3,45 +3,24 @@ import requests
 import datetime
 import os
 import subprocess
-from get_tennis_odds import build_odds_dataframe  # Fonction modulaire pour les cotes
+from get_tennis_odds import build_odds_dataframe
 
-# 🔐 Clés API depuis les variables d’environnement
+# 🔐 Clés API
 API_TENNIS_KEY = os.getenv("API_TENNIS_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# 📦 Fonction modulaire pour les cotes
 def get_odds():
-    return build_odds_dataframe()
+    df = build_odds_dataframe()
+    df.to_csv("odds_debug.csv", index=False)  # sauvegarde pour debug
+    return df
 
-# 📡 Fonction pour récupérer les matchs du jour via API-Tennis
 def get_matches():
     today = datetime.datetime.today().strftime('%Y-%m-%d')
     url_events = f"https://api.api-tennis.com/tennis/?method=get_events&APIkey={API_TENNIS_KEY}&date={today}"
-    print(f"🔗 URL appelée : {url_events}")
-
     response = requests.get(url_events)
-    print(f"📥 Statut API : {response.status_code}")
-    print(f"📄 Contenu brut reçu :\n{response.text}")
-
-    if response.status_code != 200:
-        raise Exception(f"❌ Erreur API Tennis : statut {response.status_code}")
-
     data = response.json()
-    all_matches = data.get("result", [])
-
-    # ✅ Filtrer les vrais matchs avec players
-    matches = [
-        m for m in all_matches
-        if "player1_name" in m and "player2_name" in m and m.get("category") in ["ATP", "WTA"]
-    ]
-
-    if matches:
-        print(f"✅ {len(matches)} matchs tennis récupérés.")
-        print(f"🔍 Premier match brut : {matches[0]}")
-    else:
-        print("🚫 Aucun match ATP/WTA trouvé dans les résultats.")
-
+    matches = [m for m in data.get("result", []) if m.get("event_type") == "match" and m.get("category") in ["ATP", "WTA"]]
     return pd.DataFrame([{
         "player1": m.get("player1_name", "unknown").strip(),
         "player2": m.get("player2_name", "unknown").strip(),
@@ -49,13 +28,11 @@ def get_matches():
         "tournament": m.get("tournament_name", "unknown").strip()
     } for m in matches])
 
-# ✉️ Envoi de message Telegram
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     data = {"chat_id": CHAT_ID, "text": message}
     requests.post(url, data=data)
 
-# 🤖 Fonction principale du bot
 def run_prediction_and_send_message():
     matches_df = get_matches()
     odds_df = get_odds()
@@ -70,11 +47,24 @@ def run_prediction_and_send_message():
         send_telegram(f"❌ Erreur de fusion des données : {e}")
         return
 
+    # ✅ Résumé fusion
+    merged_count = len(df)
+    total_matches = len(matches_df)
+    total_odds = len(odds_df)
+    summary = f"🔍 Fusion effectuée :\n- Matchs API Tennis : {total_matches}\n- Cotes récupérées : {total_odds}\n- Matchs fusionnés : {merged_count}"
+    send_telegram(summary)
+
     if df.empty:
-        send_telegram("⚠️ Aucun match avec cotes disponibles aujourd’hui.")
+        # 📎 Envoi du CSV debug
+        import telegram
+        bot = telegram.Bot(token=TELEGRAM_TOKEN)
+        try:
+            bot.send_document(chat_id=CHAT_ID, document=open("odds_debug.csv", "rb"))
+        except Exception as e:
+            print(f"❌ Envoi odds_debug échoué : {e}")
         return
 
-    # 📥 Charger Elo
+    # 📥 Chargement fichier Elo
     elo_path = "elo_dynamique_2024_K_variable.csv"
     if not os.path.exists(elo_path):
         send_telegram("❌ Fichier Elo manquant.")
@@ -82,16 +72,14 @@ def run_prediction_and_send_message():
 
     elo_df = pd.read_csv(elo_path)
 
-    # 🔄 Restructurer en long format
     if {"player", "elo_Hard", "elo_Clay", "elo_Grass"}.issubset(elo_df.columns):
         elo_df = elo_df.melt(id_vars="player", var_name="surface", value_name="elo")
         elo_df["surface"] = elo_df["surface"].str.replace("elo_", "").str.lower()
 
     if not {"player", "surface", "elo"}.issubset(elo_df.columns):
-        send_telegram("❌ Le fichier Elo est invalide. Il doit contenir les colonnes : player, surface, elo.")
+        send_telegram("❌ Fichier Elo invalide. Colonnes requises : player, surface, elo.")
         return
 
-    # 🔍 Mapping Elo
     elo_dict = {(row['player'], row['surface']): row['elo'] for _, row in elo_df.iterrows()}
     def get_elo(player, surface):
         return elo_dict.get((player, surface), 1500)
@@ -118,7 +106,12 @@ def run_prediction_and_send_message():
             msg += "\n" + line
         send_telegram(msg)
 
-# ▶️ Lancement automatique
+    # 📝 Log
+    with open("log.txt", "a") as f:
+        now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        f.write(f"{now} - Matchs fusionnés : {merged_count}, Value bets : {len(bets)}\n")
+
+# ▶️ Exécution complète
 if __name__ == "__main__":
     run_prediction_and_send_message()
     subprocess.run(["python", "fetch_results.py"])
