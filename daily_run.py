@@ -1,15 +1,14 @@
-# daily_run.py
-
 import os
 import requests
 import datetime
 import pandas as pd
 from telegram_bot import send_message
+from get_tennis_odds import build_odds_dataframe
 
 # 🔐 Clés API depuis les variables d'environnement
 API_TENNIS_KEY = os.getenv("API_TENNIS_KEY")
 
-# 📅 Date du jour au format AAAA-MM-JJ
+# 📅 Date du jour
 today = datetime.date.today().strftime("%Y-%m-%d")
 
 # 📄 Fichier Elo
@@ -19,12 +18,11 @@ ELO_FILE = "elo_dynamique_2024_K_variable.csv"
 def elo_probability(elo1, elo2):
     return 1 / (1 + 10 ** ((elo2 - elo1) / 400))
 
-# 📦 Obtenir les cotes via ton module externe
-from get_tennis_odds import build_odds_dataframe
+# 📦 Obtenir les cotes
 def get_odds():
     return build_odds_dataframe()
 
-# 📡 Obtenir les matchs du jour depuis API-Tennis
+# 📡 Obtenir les matchs du jour
 def get_matches():
     url = f"https://api.api-tennis.com/tennis/?method=get_fixtures&APIkey={API_TENNIS_KEY}&date_start={today}&date_stop={today}"
     response = requests.get(url)
@@ -70,8 +68,10 @@ def run_bot():
         return
 
     df = pd.merge(matches, odds, on=["player1", "player2"], how="inner")
+    match_count = len(df)
+
     if df.empty:
-        send_message("📭 Aucun match avec cotes trouvés aujourd’hui.")
+        send_message(f"📊 *{match_count} matchs analysés aujourd’hui*\n🟡 *Aucun match avec cotes disponibles.*")
         return
 
     # Récup Elo
@@ -89,7 +89,7 @@ def run_bot():
     bets = df[(df["value1"] > 0.05) | (df["value2"] > 0.05)]
 
     # 📬 Résultat Telegram
-    message = f"📊 *{len(df)} matchs analysés aujourd’hui*\n\n"
+    message = f"📊 *{match_count} matchs analysés aujourd’hui*\n\n"
     if bets.empty:
         message += "🟡 *Aucun value bet détecté*"
     else:
@@ -102,7 +102,8 @@ def run_bot():
                 line += f"➡️ *{row['player2']}* @ {row['odds2']} (value: {row['value2']:.1%})\n"
             line += "\n"
             message += line
+
     send_message(message.strip())
 
 if __name__ == "__main__":
-    run_bot()
+    run_bot() 
