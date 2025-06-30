@@ -5,22 +5,22 @@ import pandas as pd
 from telegram_bot import send_message
 from get_tennis_odds import build_odds_dataframe
 
-# 🔐 Clé API
+# 🔐 Clés API depuis les variables d'environnement
 API_TENNIS_KEY = os.getenv("API_TENNIS_KEY")
 
-# 📅 Date du jour
+# 📅 Date du jour au format AAAA-MM-JJ
 today = datetime.date.today().strftime("%Y-%m-%d")
 
 # 📄 Fichier Elo
 ELO_FILE = "elo_dynamique_2024_K_variable.csv"
 
+# 🧹 Nettoyage noms joueurs
+def clean_name(name):
+    return name.lower().strip().replace(".", "").replace("-", " ")
+
 # 🔁 Proba Elo
 def elo_probability(elo1, elo2):
     return 1 / (1 + 10 ** ((elo2 - elo1) / 400))
-
-# 📦 Obtenir les cotes
-def get_odds():
-    return build_odds_dataframe()
 
 # 📡 Obtenir les matchs du jour depuis API-Tennis
 def get_matches():
@@ -37,12 +37,15 @@ def get_matches():
         if m.get("event_type_type") not in ["Atp Singles", "Wta Singles"]:
             continue
         matches.append({
-            "player1": m["event_first_player"].strip(),
-            "player2": m["event_second_player"].strip(),
+            "player1": clean_name(m["event_first_player"]),
+            "player2": clean_name(m["event_second_player"]),
             "surface": m.get("surface", "unknown").lower().strip(),
             "tournament": m.get("tournament_name", "unknown").strip()
         })
-    return pd.DataFrame(matches)
+
+    df = pd.DataFrame(matches)
+    print(f"📥 {len(df)} matchs récupérés depuis API-Tennis")
+    return df
 
 # 🧠 Charger Elo
 def load_elo():
@@ -54,25 +57,33 @@ def load_elo():
     if {"player", "elo_Hard", "elo_Clay", "elo_Grass"}.issubset(df.columns):
         df = df.melt(id_vars="player", var_name="surface", value_name="elo")
         df["surface"] = df["surface"].str.replace("elo_", "").str.lower()
+    df["player"] = df["player"].apply(clean_name)
     return df
 
 # 🤖 Routine principale
 def run_bot():
     print("🚀 Lancement du bot")
+
     matches = get_matches()
-    odds = get_odds()
+    odds = build_odds_dataframe()
     elo_df = load_elo()
 
-    if matches.empty or odds.empty or elo_df is None:
-        send_message("⚠️ Erreur récupération des données.")
+    if matches.empty:
+        send_message("⚠️ Aucun match récupéré depuis l'API Tennis aujourd’hui.")
+        return
+    if odds.empty:
+        send_message(f"📊 {len(matches)} matchs récupérés mais aucun avec cotes.")
+        return
+    if elo_df is None:
+        send_message("⛔ Fichier Elo introuvable.")
         return
 
     df = pd.merge(matches, odds, on=["player1", "player2"], how="inner")
     if df.empty:
-        send_message(f"📊 *{len(matches)} matchs récupérés mais aucun avec cotes.*")
+        send_message(f"📊 {len(matches)} matchs récupérés mais aucun avec cotes compatibles.")
         return
 
-    # Elo
+    # Récup Elo
     elo_dict = {(row["player"], row["surface"]): row["elo"] for _, row in elo_df.iterrows()}
     def get_elo(player, surface):
         return elo_dict.get((player, surface), 1500)
@@ -86,22 +97,22 @@ def run_bot():
 
     bets = df[(df["value1"] > 0.05) | (df["value2"] > 0.05)]
 
-    # 📨 Message Telegram
+    # 📬 Résultat Telegram
     message = f"📊 *{len(df)} matchs analysés aujourd’hui*\n\n"
     if bets.empty:
-        message += "🟡 *Aucun value bet détecté aujourd’hui.*"
+        message += "🟡 *Aucun value bet détecté*"
     else:
-        message += "🔥 *Value bets détectés :*\n"
+        message += "🔥 *Value bets trouvés* :\n"
         for _, row in bets.iterrows():
-            line = f"🎾 {row['player1']} vs {row['player2']} ({row['surface']})\n"
+            line = f"🎾 {row['player1'].title()} vs {row['player2'].title()} ({row['surface']})\n"
             if row["value1"] > 0.05:
-                line += f"➡️ *{row['player1']}* @ {row['odds1']} (value: {row['value1']:.1%})\n"
+                line += f"➡️ *{row['player1'].title()}* @ {row['odds1']} (value: {row['value1']:.1%})\n"
             if row["value2"] > 0.05:
-                line += f"➡️ *{row['player2']}* @ {row['odds2']} (value: {row['value2']:.1%})\n"
+                line += f"➡️ *{row['player2'].title()}* @ {row['odds2']} (value: {row['value2']:.1%})\n"
             line += "\n"
             message += line
+
     send_message(message.strip())
 
-# ▶️ Exécuter
 if __name__ == "__main__":
     run_bot()
