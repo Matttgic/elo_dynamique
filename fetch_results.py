@@ -1,9 +1,9 @@
-import pandas as pd
 import requests
-import datetime
 import os
+import pandas as pd
+import datetime
 
-# 🔐 Clé API en variable d’environnement
+# 🔐 Clé API Tennis
 API_TENNIS_KEY = os.getenv("API_TENNIS_KEY")
 
 # 📁 Fichier CSV de sortie
@@ -12,13 +12,23 @@ OUTPUT_FILE = "results.csv"
 # 📅 Récupérer la date d’hier
 yesterday = (datetime.datetime.today() - datetime.timedelta(days=1)).strftime('%Y-%m-%d')
 
-# 📡 Appel API pour récupérer les résultats
+# 📡 URL de l’API Tennis
 url = f"https://api.api-tennis.com/tennis/?method=get_results&APIkey={API_TENNIS_KEY}&date={yesterday}"
 response = requests.get(url)
+
+# ✅ Vérification de la réponse avant json()
+if response.status_code != 200 or not response.text.strip().startswith("{"):
+    print(f"⛔ Erreur API Tennis : statut {response.status_code}")
+    print("🔎 Contenu brut reçu :", response.text)
+    exit()
+
 data = response.json()
 
-# ✅ Filtrer les résultats ATP/WTA uniquement
-matches = [m for m in data.get("result", []) if m.get("category") in ["ATP", "WTA"] and m.get("event_type") == "match"]
+# ✅ Filtrer les résultats ATP/WTA
+matches = [
+    m for m in data.get("result", [])
+    if m.get("category") in ["ATP", "WTA"] and m.get("event_type") == "match"
+]
 
 # 🧾 Construction des lignes de résultats
 rows = []
@@ -38,10 +48,10 @@ for match in matches:
             "tournament": t
         })
 
-# 📦 Sauvegarder dans results.csv
+# 💾 Sauvegarde
 if rows:
     df = pd.DataFrame(rows)
     df.to_csv(OUTPUT_FILE, index=False)
     print(f"✅ {len(df)} résultats sauvegardés dans {OUTPUT_FILE}")
 else:
-    print("⚠️ Aucun résultat valide récupéré.") 
+    print("⚠️ Aucun résultat valide récupéré.")
