@@ -26,9 +26,20 @@ def get_matches():
 def get_odds():
     url_odds = f"https://api.the-odds-api.com/v4/sports/tennis/events/?apiKey={ODDS_API_KEY}&regions=eu"
     odds_response = requests.get(url_odds)
-    odds_data = odds_response.json()
+    try:
+        odds_data = odds_response.json()
+    except Exception:
+        print("❌ Impossible de parser la réponse JSON de The Odds API")
+        return pd.DataFrame()
+
+    if not isinstance(odds_data, list):
+        print("❌ Format inattendu de odds_data :", odds_data)
+        return pd.DataFrame()
+
     odds_list = []
     for event in odds_data:
+        if not isinstance(event, dict):
+            continue
         if not event.get('bookmakers'):
             continue
         bookmaker = event['bookmakers'][0]
@@ -46,6 +57,7 @@ def get_odds():
             })
         except:
             continue
+
     return pd.DataFrame(odds_list)
 
 def send_telegram(message):
@@ -112,6 +124,6 @@ def run_prediction_and_send_message():
 if __name__ == "__main__":
     run_prediction_and_send_message()
 
-    # 🔁 Étapes supplémentaires après les paris
-    subprocess.run(["python", "fetch_results.py"])     # récupère les résultats d’hier
-    subprocess.run(["python", "update_elo.py"])        # met à jour les Elo
+    # 🔁 Étapes post-pronos : fetch résultats + maj Elo
+    subprocess.run(["python", "fetch_results.py"])
+    subprocess.run(["python", "update_elo.py"])
