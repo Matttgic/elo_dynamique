@@ -3,25 +3,22 @@ import requests
 import datetime
 import os
 import subprocess
-from get_tennis_odds import build_odds_dataframe
+from get_tennis_odds import build_odds_dataframe  # Fonction modulaire pour les cotes
 
 # 🔐 Clés API depuis les variables d’environnement
 API_TENNIS_KEY = os.getenv("API_TENNIS_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-print(f"🔑 Clé API Tennis : {API_TENNIS_KEY[:5]}...")  # Vérification que la clé est bien injectée
-print(f"📨 Chat ID : {CHAT_ID} - Token Telegram début : {TELEGRAM_TOKEN[:5]}...")
-
 # 📦 Fonction modulaire pour les cotes
 def get_odds():
     return build_odds_dataframe()
 
-# 📡 Récupérer les matchs du jour via API-Tennis
+# 📡 Fonction pour récupérer les matchs du jour via API-Tennis
 def get_matches():
     today = datetime.datetime.today().strftime('%Y-%m-%d')
     url_events = f"https://api.api-tennis.com/tennis/?method=get_events&APIkey={API_TENNIS_KEY}&date={today}"
-    print(f"🌐 URL appelée : {url_events}")
+    print(f"🔗 URL appelée : {url_events}")
 
     response = requests.get(url_events)
     print(f"📥 Statut API : {response.status_code}")
@@ -31,8 +28,20 @@ def get_matches():
         raise Exception(f"❌ Erreur API Tennis : statut {response.status_code}")
 
     data = response.json()
-    matches = [m for m in data.get("result", []) if m.get("event_type") == "match" and m.get("category") in ["ATP", "WTA"]]
-    print(f"✅ {len(matches)} matchs tennis récupérés.")
+    all_matches = data.get("result", [])
+
+    # ✅ Filtrer les vrais matchs avec players
+    matches = [
+        m for m in all_matches
+        if "player1_name" in m and "player2_name" in m and m.get("category") in ["ATP", "WTA"]
+    ]
+
+    if matches:
+        print(f"✅ {len(matches)} matchs tennis récupérés.")
+        print(f"🔍 Premier match brut : {matches[0]}")
+    else:
+        print("🚫 Aucun match ATP/WTA trouvé dans les résultats.")
+
     return pd.DataFrame([{
         "player1": m.get("player1_name", "unknown").strip(),
         "player2": m.get("player2_name", "unknown").strip(),
@@ -48,13 +57,9 @@ def send_telegram(message):
 
 # 🤖 Fonction principale du bot
 def run_prediction_and_send_message():
-    try:
-        matches_df = get_matches()
-    except Exception as e:
-        send_telegram(f"❌ Erreur lors de la récupération des matchs : {e}")
-        return
-
+    matches_df = get_matches()
     odds_df = get_odds()
+
     if matches_df.empty or odds_df.empty:
         send_telegram("⚠️ Aucun match ou aucune cote disponible aujourd’hui.")
         return
@@ -69,7 +74,7 @@ def run_prediction_and_send_message():
         send_telegram("⚠️ Aucun match avec cotes disponibles aujourd’hui.")
         return
 
-    # 📥 Charger fichier Elo
+    # 📥 Charger Elo
     elo_path = "elo_dynamique_2024_K_variable.csv"
     if not os.path.exists(elo_path):
         send_telegram("❌ Fichier Elo manquant.")
@@ -77,15 +82,16 @@ def run_prediction_and_send_message():
 
     elo_df = pd.read_csv(elo_path)
 
+    # 🔄 Restructurer en long format
     if {"player", "elo_Hard", "elo_Clay", "elo_Grass"}.issubset(elo_df.columns):
         elo_df = elo_df.melt(id_vars="player", var_name="surface", value_name="elo")
         elo_df["surface"] = elo_df["surface"].str.replace("elo_", "").str.lower()
 
-    required_cols = {"player", "surface", "elo"}
-    if not required_cols.issubset(elo_df.columns):
+    if not {"player", "surface", "elo"}.issubset(elo_df.columns):
         send_telegram("❌ Le fichier Elo est invalide. Il doit contenir les colonnes : player, surface, elo.")
         return
 
+    # 🔍 Mapping Elo
     elo_dict = {(row['player'], row['surface']): row['elo'] for _, row in elo_df.iterrows()}
     def get_elo(player, surface):
         return elo_dict.get((player, surface), 1500)
@@ -112,7 +118,7 @@ def run_prediction_and_send_message():
             msg += "\n" + line
         send_telegram(msg)
 
-# ▶️ Exécution
+# ▶️ Lancement automatique
 if __name__ == "__main__":
     run_prediction_and_send_message()
     subprocess.run(["python", "fetch_results.py"])
