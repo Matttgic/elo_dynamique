@@ -10,16 +10,30 @@ API_TENNIS_KEY = os.getenv("API_TENNIS_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 
-# 📦 Fonction modulaire pour les cotes
-def get_odds():
-    return build_odds_dataframe()
+# ✉️ Envoi de message Telegram
+def send_telegram(message):
+    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+    data = {"chat_id": CHAT_ID, "text": message}
+    requests.post(url, data=data)
 
-# 📡 Fonction pour récupérer les matchs du jour via API-Tennis
+# 📡 Fonction pour récupérer les matchs du jour via API-Tennis avec gestion des erreurs
 def get_matches():
     today = datetime.datetime.today().strftime('%Y-%m-%d')
     url_events = f"https://api.api-tennis.com/tennis/?method=get_events&APIkey={API_TENNIS_KEY}&date={today}"
     response = requests.get(url_events)
-    data = response.json()
+
+    if response.status_code != 200:
+        send_telegram(f"❌ Erreur API Tennis : statut {response.status_code}")
+        print("Contenu brut reçu :", response.text)
+        return pd.DataFrame()
+
+    try:
+        data = response.json()
+    except Exception as e:
+        send_telegram("❌ Erreur JSON dans la réponse de l’API Tennis.")
+        print("Erreur de parsing JSON :", e)
+        return pd.DataFrame()
+
     matches = [m for m in data.get("result", []) if m.get("event_type") == "match" and m.get("category") in ["ATP", "WTA"]]
     return pd.DataFrame([{
         "player1": m.get("player1_name", "unknown").strip(),
@@ -28,11 +42,9 @@ def get_matches():
         "tournament": m.get("tournament_name", "unknown").strip()
     } for m in matches])
 
-# ✉️ Envoi de message Telegram
-def send_telegram(message):
-    url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": message}
-    requests.post(url, data=data)
+# 📦 Fonction modulaire pour les cotes
+def get_odds():
+    return build_odds_dataframe()
 
 # 🤖 Fonction principale du bot
 def run_prediction_and_send_message():
