@@ -1,0 +1,36 @@
+name: Fetch Results & Update Elo
+
+on:
+  schedule:
+    - cron: '0 6 * * *'  # Tous les jours à 06h UTC = 08h heure française
+  workflow_dispatch:
+
+jobs:
+  update-elo:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Cloner le dépôt
+        uses: actions/checkout@v3
+
+      - name: 🐍 Installer Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Installer les dépendances Python
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 📡 Récupérer les résultats des matchs
+        env:
+          API_TENNIS_KEY: ${{ secrets.API_TENNIS_KEY }}
+        run: |
+          echo "📡 Lancement de fetch_results.py"
+          python fetch_results.py
+
+      - name: 🧠 Mettre à jour le fichier Elo
+        run: |
+          echo "🧠 Lancement de update_elo.py"
+          python update_elo.py
