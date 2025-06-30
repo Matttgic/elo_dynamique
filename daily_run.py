@@ -3,12 +3,15 @@ import requests
 import datetime
 import os
 import subprocess
+from get_tennis_odds import build_odds_dataframe  # ⬅️ Import modulaire
 
 # 🔐 Clés via variables d’environnement
-ODDS_API_KEY = os.getenv("ODDS_API_KEY")
 API_TENNIS_KEY = os.getenv("API_TENNIS_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
+
+def get_odds():
+    return build_odds_dataframe()
 
 def get_matches():
     today = datetime.datetime.today().strftime('%Y-%m-%d')
@@ -22,43 +25,6 @@ def get_matches():
         "surface": m.get("surface", "unknown").lower().strip() if m.get("surface") else "unknown",
         "tournament": m.get("tournament_name", "unknown").strip()
     } for m in matches])
-
-def get_odds():
-    url_odds = f"https://api.the-odds-api.com/v4/sports/tennis/events/?apiKey={ODDS_API_KEY}&regions=eu"
-    odds_response = requests.get(url_odds)
-    try:
-        odds_data = odds_response.json()
-    except Exception:
-        print("❌ Impossible de parser la réponse JSON de The Odds API")
-        return pd.DataFrame()
-
-    if not isinstance(odds_data, list):
-        print("❌ Format inattendu de odds_data :", odds_data)
-        return pd.DataFrame()
-
-    odds_list = []
-    for event in odds_data:
-        if not isinstance(event, dict):
-            continue
-        if not event.get('bookmakers'):
-            continue
-        bookmaker = event['bookmakers'][0]
-        if not bookmaker.get('markets'):
-            continue
-        markets = bookmaker['markets'][0].get('outcomes', [])
-        if len(markets) < 2:
-            continue
-        try:
-            odds_list.append({
-                "player1": markets[0]['name'].strip(),
-                "player2": markets[1]['name'].strip(),
-                "odds1": float(markets[0]['price']),
-                "odds2": float(markets[1]['price'])
-            })
-        except:
-            continue
-
-    return pd.DataFrame(odds_list)
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -126,4 +92,4 @@ if __name__ == "__main__":
 
     # 🔁 Étapes post-pronos : fetch résultats + maj Elo
     subprocess.run(["python", "fetch_results.py"])
-    subprocess.run(["python", "update_elo.py"])
+    subprocess.run(["python", "update_elo.py"]) 
