@@ -3,11 +3,17 @@ name: Run Tennis Betting Bot Daily
 on:
   schedule:
     - cron: '0 5 * * *'  # Tous les jours à 7h heure de Paris (5h UTC)
-  workflow_dispatch:     # Permet le lancement manuel
+  workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
+
+    env:  # 🔐 Injection des secrets dans les variables d'environnement
+      API_TENNIS_KEY: ${{ secrets.API_TENNIS_KEY }}
+      ODDS_API_KEY: ${{ secrets.ODDS_API_KEY }}
+      TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+      CHAT_ID: ${{ secrets.CHAT_ID }}
 
     steps:
       - name: ⬇️ Cloner le dépôt Git
@@ -24,5 +30,5 @@ jobs:
       - name: 🚀 Lancer le script principal
         run: python daily_run.py
 
-      - name: 🧪 Tester les variables d’environnement
+      - name: ✅ Tester les variables d’environnement
         run: python check_env.py
