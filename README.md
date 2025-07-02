@@ -1,5 +1,7 @@
-Bot selon model 1.07
+Bot selon elo dynamique 
 
-Proba bookmakers x 1.07
+calcul proba selon elo dynamique des joueurs 
 
-14 règles active selon surface et côte 
+compare la proba a la proba des côtes 
+
+si value > 5% déclenche pari
