@@ -1,9 +1,0 @@
-services:
-  - type: web
-    name: tennis-bilan-bot
-    env: python
-    plan: free
-    build:
-      installCommand: pip install -r requirements.txt
-      buildCommand: ""
-    startCommand: python app_auto.py 
